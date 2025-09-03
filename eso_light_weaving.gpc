@@ -1,0 +1,1008 @@
+// ESO Weave: Skill press -> Light Attack (R2) -> Skill -> Block tap (L2)
+// Buttons: Square, Triangle, Circle, L1, R1
+
+// === CONSTANTS (GPC-compatible variables) ===
+int BLOCK_DURATION_SHORT;   // Block duration for regular skills
+int BLOCK_DURATION_LONG;    // Block duration for ultimate
+int STARTUP_DISPLAY_TIME;   // Display startup message duration
+int SAVE_MESSAGE_TIME;      // Settings saved message duration
+int MENU_DISPLAY_DELAY;     // Delay to prevent display issues
+int MAX_MENU_INDEX;         // Maximum menu item index
+int TOTAL_MENU_ITEMS;       // Total number of menu items (0-20)
+int SKILL_BUTTON_COUNT;     // Number of skill buttons
+int ULT_BUTTON_COUNT;       // Number of ultimate cancel buttons
+
+// Default timing values for reset functionality
+int DEFAULT_R2_HOLD_TIME;
+int DEFAULT_GAP_BEFORE_SKILL;
+int DEFAULT_GAP_BEFORE_BLOCK;
+int DEFAULT_L2_HOLD_TIME;
+int DEFAULT_SQUARE_SKILL_HOLD;
+int DEFAULT_TRIANGLE_SKILL_HOLD;
+int DEFAULT_CIRCLE_SKILL_HOLD;
+int DEFAULT_L1_SKILL_HOLD;
+int DEFAULT_R1_SKILL_HOLD;
+
+// Ultimate default values
+int DEFAULT_ULTIMATE_SKILL_HOLD;
+int DEFAULT_ULTIMATE_CANCEL_SKILL_HOLD;
+int DEFAULT_ULTIMATE_COMBO_SKILL_HOLD;
+
+int BUSY = FALSE;
+
+// OLED Display variables
+int display_active = TRUE;
+int status_display_timer = 0;
+int last_weave_time = 0;
+int weave_count = 0;               // Total weaves performed
+int weave_start_time = 0;          // For measuring weave duration
+int last_combo_duration = 0;       // Duration of last combo
+int avg_weave_time = 0;            // Running average
+int performance_tracking = FALSE;   // Enable performance metrics
+
+
+const string ESO_TITLE[] = { "ESO Light Weaving" };
+const string STATUS_READY[] = { "READY" };
+const string STATUS_WEAVING[] = { "WEAVING" };
+const string STATUS_ULTIMATE[] = { "ULTIMATE" };
+const string STATUS_DISABLED[] = { "DISABLED" };
+
+// Character constants for ESO startup display  
+const string ESO_SUBTITLE[] = { "ESO Enhanced v2.0" };
+const string C[] = { "C" };
+const string O[] = { "o" };
+const string R[] = { "r" };
+const string E[] = { "e" };
+const string S[] = { "S" };
+const string X[] = { "x" };
+const string SPACE[] = { " " };
+const string DASH[] = { "-" };
+const string A[] = { "A" };
+const string I[] = { "i" };
+const string M[] = { "m" };
+const string W[] = { "W" };
+const string V[] = { "V" };
+const string N[] = { "N" };
+const string G[] = { "G" };
+
+// Menu system variables
+int ModMenu = FALSE;
+int ModEdit = FALSE;
+int display_EDIT = FALSE;
+
+// OLED display control
+int display_title = TRUE;
+int display_black;
+int refresh_OLED = FALSE;
+int adjust_variable_idx = 0;
+int count_black;
+int LED_OnOff;
+int rumble_tipe = RUMBLE_A;
+
+// Timer constants
+define TimeToShowIntroPicture = 30000;
+
+// Color constants
+define ColorOFF  = 0;
+define Blue      = 1;
+define Red       = 2;
+define Green     = 3;
+define Pink      = 4;
+define SkyBlue   = 5;
+define Yellow    = 6;
+define White     = 7;
+
+// Color data array                    
+data(                 
+  0,0,0, //0. ColorOFF
+  2,0,0, //1. Blue     
+  0,2,0, //2. Red      
+  0,0,2, //3. Green    
+  2,2,0, //4. Pink     
+  2,0,2, //5. SkyBlue 
+  0,2,2, //6. Yellow   
+  2,2,2  //7. White    
+); // end of data segment
+
+// Per-button settings: LA on/off, Block on/off for each button
+int square_la_enabled = TRUE;         // Square: LA ON
+int square_block_enabled = TRUE;      // Square: Block ON
+int triangle_la_enabled = TRUE;      // Triangle: LA ON (for channeled)
+int triangle_block_enabled = TRUE;   // Triangle: Block ON (for channeled)
+int circle_la_enabled = TRUE;         // Circle: LA ON
+int circle_block_enabled = TRUE;      // Circle: Block ON
+int l1_la_enabled = TRUE;           // L1: LA ON (for buffs)
+int l1_block_enabled = TRUE;        // L1: Block ON
+int r1_la_enabled = TRUE;            // R1: LA ON
+int r1_block_enabled = TRUE;         // R1: Block ON
+int weaving_enabled = TRUE;
+
+// Ultimate-specific settings (simplified)
+int ultimate_combo_mode = TRUE;       // Ultimate combo mode: OFF=manual, ON=full auto combo
+int ultimate_skill_hold = 0;        // Ultimate: L1+R1 hold time (ESO research-based)
+int ultimate_combo_skill_hold = 0;  // Ultimate: Skill hold time after ultimate
+int burst_weaving_enabled = FALSE; // Enable burst weaving mode
+int burst_weaving_active = FALSE;  // Currently in burst mode
+int burst_combo_count = 0;         // Track burst combos
+int burst_max_combos = 3;          // Max combos in burst sequence
+
+// Ultimate weaving variables
+int ULT_BUSY = FALSE;
+int BURST_BUSY = FALSE;
+int ult_cancel_button = 0; // 0=R1, 1=L1, 2=Square, 3=Circle, 4=Triangle
+
+// Menu variable names for display - Simplified Structure
+const string EditVarStr[] = {
+    "Weaving",        // 0 - Master toggle
+    "R2 Hold Time",   // 1 - Global R2 hold (light attack)
+    "Gap Before Skill", // 2 - Gap after R2, before skill
+    "Gap Before Block", // 3 - Gap after skill, before block
+    "L2 Hold Time",   // 4 - Global L2 hold (block tap)
+    "Square LA",      // 5 - Square Light Attack toggle
+    "Square Skill Hold", // 6 - Square skill hold time
+    "Square Block",   // 7 - Square Block Cancel toggle
+    "Triangle LA",    // 8 - Triangle Light Attack toggle
+    "Triangle Skill Hold", // 9 - Triangle skill hold time
+    "Triangle Block", // 10 - Triangle Block Cancel toggle
+    "Circle LA",      // 11 - Circle Light Attack toggle
+    "Circle Skill Hold", // 12 - Circle skill hold time
+    "Circle Block",   // 13 - Circle Block Cancel toggle
+    "L1 LA",          // 14 - L1 Light Attack toggle
+    "L1 Skill Hold",  // 15 - L1 skill hold time
+    "L1 Block",       // 16 - L1 Block Cancel toggle
+    "R1 LA",          // 17 - R1 Light Attack toggle
+    "R1 Skill Hold",  // 18 - R1 skill hold time
+    "R1 Block",       // 19 - R1 Block Cancel toggle
+    "Ult Combo Mode", // 20 - Ultimate combo mode (OFF=manual, ON=auto)
+    "Ultimate Hold",  // 21 - Ultimate L1+R1 hold time
+    "Ult Skill Button", // 22 - Skill button to use after ultimate
+    "Ult Skill Hold"  // 23 - Skill hold time after ultimate
+};
+
+// Value ranges for each timing - flattened [min, max, min, max, ...] (24 elements)
+int ValRange[24];
+
+// Display strings
+const string ON[] = { "ON" };
+const string OFF[] = { "OFF" };
+const string EDIT_VALUE_TXT[] = { "Edit Value" };
+const string SAVED_MSG[] = { "Settings Saved" };
+
+// Save confirmation messages
+const string EXIT_TXT1[] = { "SETTINGS" };
+const string EXIT_TXT2[] = { "WAS SAVED" };
+const string LA_TEXT[] = { "LA:" };
+const string BC_TEXT[] = { "BC:" };
+const string ULT_TEXT[] = { "ULT:" };
+const string ACTIVE_INDICATOR[] = { "[ACTIVE]" };
+const string SQ_TEXT[] = { "SQ:" };
+const string TR_TEXT[] = { "TR:" };
+const string L_TEXT[] = { "L" };
+const string B_TEXT[] = { "B" };
+
+// Button names for Ultimate cancel selection
+const string BTN_R1[] = { "R1" };
+const string BTN_L1[] = { "L1" };
+const string BTN_SQUARE[] = { "Square" };
+const string BTN_CIRCLE[] = { "Circle" };
+const string BTN_TRIANGLE[] = { "Triangle" };
+
+// ASCII numbers for display
+const int8 ASCII_NUM[] = {48,49,50,51,52,53,54,55,56,57};
+
+// Button mapping array for unified weaving
+int SKILL_BUTTONS[5];
+int ULT_BUTTONS[5];
+
+// --- Global Timings (ms) - Optimized for Responsiveness ---
+int R2_HOLD_TIME     = 80;   // Light attack hold time (80ms for reliable registration)
+int GAP_BEFORE_SKILL = 100;  // Gap after LA before skill (reduced for responsiveness)
+int GAP_BEFORE_BLOCK = 180;  // Gap after skill before block-cancel (much larger gap)
+int L2_HOLD_TIME     = 350;  // Block tap duration (very long for reliable cancel)
+
+// --- Per-Button Settings - Even Longer Skill Animations ---
+int SQUARE_SKILL_HOLD   = 0;  // Surprise Attack - much longer for full animation
+int TRIANGLE_SKILL_HOLD = 0;  // DOT/channeled skills - full animation completion
+int CIRCLE_SKILL_HOLD   = 0;  // Instant utility skills - more time
+int L1_SKILL_HOLD       = 0;  // Buff/healing skills - full registration time
+int R1_SKILL_HOLD       = 0;  // Spammable DPS skills - longer animation
+
+// Latency compensation profiles
+int latency_profile = 0; // 0=Low, 1=Medium, 2=High, 3=Custom
+int LATENCY_ADJUSTMENTS[12]; // Flattened: 4 profiles * 3 adjustments = 12 elements
+int custom_latency[3]; // Custom latency adjustments [gap, skill, block]
+
+// Class-specific timing presets
+int class_preset = 0; // 0=Custom, 1=DPS, 2=Tank, 3=Healer, 4=PvP
+const string CLASS_NAMES[] = { "Custom", "DPS", "Tank", "Healer", "PvP" };
+int CLASS_PRESETS[25]; // Flattened: 5 classes * 5 timings = 25 elements
+
+// Ultimate weaving timings - Based on Incapacitating Strike research
+int ULT_LA_HOLD        = 50;   // R2 light attack (50ms for registration)
+int ULT_GAP_BEFORE_ULT = 1000; // ESO GCD timing before ultimate
+int ULT_CAST_DELAY     = 200;  // Incapacitating Strike 500ms cast delay
+int ULT_ANIMATION      = 300;  // ~300ms animation spin after cast delay
+int ULT_GAP_BEFORE_R1  = 100;  // Gap after ultimate before skill
+int ULT_R1_HOLD        = 0;  // Skill hold time after ultimate
+int ULT_GAP_BEFORE_BLK = 100;  // Gap before block cancel
+int ULT_BLOCK_HOLD     = 50;   // L2 block cancel tap
+
+main {
+    
+    // Initialize constants on first run
+    if(display_active) {
+        // Initialize "constant" values
+        BLOCK_DURATION_SHORT = 600;
+        BLOCK_DURATION_LONG = 800;
+        STARTUP_DISPLAY_TIME = 2000;
+        SAVE_MESSAGE_TIME = 1500;
+        MENU_DISPLAY_DELAY = 50;
+        MAX_MENU_INDEX = 23;
+        TOTAL_MENU_ITEMS = 24;
+        SKILL_BUTTON_COUNT = 5;
+        ULT_BUTTON_COUNT = 5;
+        
+        // Initialize default values - Much Longer Animations
+        DEFAULT_R2_HOLD_TIME = 80;       // Light attack timing
+        DEFAULT_GAP_BEFORE_SKILL = 100;  // Responsive gap timing
+        DEFAULT_GAP_BEFORE_BLOCK = 180;  // Block cancel gap (much larger)
+        DEFAULT_L2_HOLD_TIME = 350;      // Block hold timing (very long for reliable cancel)
+        DEFAULT_SQUARE_SKILL_HOLD = 280; // Surprise Attack timing (much longer)
+        DEFAULT_TRIANGLE_SKILL_HOLD = 350; // DOT skill timing (much longer)
+        DEFAULT_CIRCLE_SKILL_HOLD = 260;  // Utility skill timing (longer)
+        DEFAULT_L1_SKILL_HOLD = 300;      // Buff skill timing (much longer)
+        DEFAULT_R1_SKILL_HOLD = 280;      // Spammable timing (much longer)
+        
+        // Ultimate defaults - ESO Research-Based
+        DEFAULT_ULTIMATE_SKILL_HOLD = 700;    // Ultimate hold time (ESO community research)
+        DEFAULT_ULTIMATE_CANCEL_SKILL_HOLD = 150; // Follow-up skill timing
+        DEFAULT_ULTIMATE_COMBO_SKILL_HOLD = 150;  // Combo skill timing
+        
+        
+        // Initialize button mapping arrays
+        SKILL_BUTTONS[0] = PS4_SQUARE;
+        SKILL_BUTTONS[1] = PS4_TRIANGLE;
+        SKILL_BUTTONS[2] = PS4_CIRCLE;
+        SKILL_BUTTONS[3] = PS4_L1;
+        SKILL_BUTTONS[4] = PS4_R1;
+        
+        ULT_BUTTONS[0] = PS4_R1;
+        ULT_BUTTONS[1] = PS4_L1;
+        ULT_BUTTONS[2] = PS4_SQUARE;
+        ULT_BUTTONS[3] = PS4_CIRCLE;
+        ULT_BUTTONS[4] = PS4_TRIANGLE;
+        
+        // Per-skill timing arrays removed due to GPC limitations
+        // SKILL_HOLD_CUSTOM initialization - DISABLED
+        
+        // Initialize latency compensation arrays (flattened indexing: profile*3 + adjustment)
+        // Low latency (0ms adjustments) - indices 0,1,2
+        LATENCY_ADJUSTMENTS[0] = 0; LATENCY_ADJUSTMENTS[1] = 0; LATENCY_ADJUSTMENTS[2] = 0;
+        // Medium latency (+10ms gaps, +20ms skill, +10ms block) - indices 3,4,5
+        LATENCY_ADJUSTMENTS[3] = 10; LATENCY_ADJUSTMENTS[4] = 20; LATENCY_ADJUSTMENTS[5] = 10;
+        // High latency (+20ms gaps, +40ms skill, +20ms block) - indices 6,7,8
+        LATENCY_ADJUSTMENTS[6] = 20; LATENCY_ADJUSTMENTS[7] = 40; LATENCY_ADJUSTMENTS[8] = 20;
+        // Custom (user defined) - indices 9,10,11
+        LATENCY_ADJUSTMENTS[9] = 0; LATENCY_ADJUSTMENTS[10] = 0; LATENCY_ADJUSTMENTS[11] = 0;
+        
+        // Initialize custom latency array
+        custom_latency[0] = 0; custom_latency[1] = 0; custom_latency[2] = 0;
+        
+        // Initialize class presets (flattened indexing: class*5 + timing)
+        // Custom (default): {80, 80, 170, 60, 60} - indices 0-4
+        CLASS_PRESETS[0] = 80; CLASS_PRESETS[1] = 80; CLASS_PRESETS[2] = 170; CLASS_PRESETS[3] = 60; CLASS_PRESETS[4] = 60;
+        // DPS (faster weaving): {70, 70, 150, 50, 50} - indices 5-9
+        CLASS_PRESETS[5] = 70; CLASS_PRESETS[6] = 70; CLASS_PRESETS[7] = 150; CLASS_PRESETS[8] = 50; CLASS_PRESETS[9] = 50;
+        // Tank (slower, more reliable): {90, 100, 200, 80, 80} - indices 10-14
+        CLASS_PRESETS[10] = 90; CLASS_PRESETS[11] = 100; CLASS_PRESETS[12] = 200; CLASS_PRESETS[13] = 80; CLASS_PRESETS[14] = 80;
+        // Healer (balanced): {85, 90, 180, 70, 70} - indices 15-19
+        CLASS_PRESETS[15] = 85; CLASS_PRESETS[16] = 90; CLASS_PRESETS[17] = 180; CLASS_PRESETS[18] = 70; CLASS_PRESETS[19] = 70;
+        // PvP (responsive): {75, 75, 160, 55, 55} - indices 20-24
+        CLASS_PRESETS[20] = 75; CLASS_PRESETS[21] = 75; CLASS_PRESETS[22] = 160; CLASS_PRESETS[23] = 55; CLASS_PRESETS[24] = 55;
+        
+        // Initialize ValRange array for simplified structure
+        ValRange[0] = 30; ValRange[1] = 400;   // R2_HOLD_TIME
+        ValRange[2] = 30; ValRange[3] = 400;   // L2_HOLD_TIME
+        ValRange[4] = 0; ValRange[5] = 400;   // SQUARE_SKILL_HOLD
+        ValRange[6] = 0; ValRange[7] = 400;   // TRIANGLE_SKILL_HOLD
+        ValRange[8] = 0; ValRange[9] = 400;   // CIRCLE_SKILL_HOLD
+        ValRange[10] = 0; ValRange[11] = 350; // L1_SKILL_HOLD
+        ValRange[12] = 0; ValRange[13] = 400; // R1_SKILL_HOLD
+        ValRange[14] = 0; ValRange[15] = 500; // ultimate_skill_hold (L1+R1 hold)
+        ValRange[16] = 10; ValRange[17] = 400; // ultimate_cancel_skill_hold
+        ValRange[18] = 10; ValRange[19] = 400; // ultimate_combo_skill_hold
+        
+        // Load saved settings from SPVARs
+        weaving_enabled = get_pvar(SPVAR_1, 0, 1, 1);  // Default ON
+        R2_HOLD_TIME = get_pvar(SPVAR_2, 30, 400, DEFAULT_R2_HOLD_TIME);
+        GAP_BEFORE_SKILL = get_pvar(SPVAR_3, 30, 400, DEFAULT_GAP_BEFORE_SKILL);
+        GAP_BEFORE_BLOCK = get_pvar(SPVAR_4, 30, 400, DEFAULT_GAP_BEFORE_BLOCK);
+        L2_HOLD_TIME = get_pvar(SPVAR_5, 30, 400, DEFAULT_L2_HOLD_TIME);
+        square_la_enabled = get_pvar(SPVAR_6, 0, 1, 1);
+        SQUARE_SKILL_HOLD = get_pvar(SPVAR_7, 0, 400, DEFAULT_SQUARE_SKILL_HOLD);
+        square_block_enabled = get_pvar(SPVAR_8, 0, 1, 1);
+        triangle_la_enabled = get_pvar(SPVAR_9, 0, 1, 1);
+        TRIANGLE_SKILL_HOLD = get_pvar(SPVAR_10, 0, 400, DEFAULT_TRIANGLE_SKILL_HOLD);
+        triangle_block_enabled = get_pvar(SPVAR_11, 0, 1, 1);
+        circle_la_enabled = get_pvar(SPVAR_12, 0, 1, 1);
+        CIRCLE_SKILL_HOLD = get_pvar(SPVAR_13, 0, 400, DEFAULT_CIRCLE_SKILL_HOLD);
+        circle_block_enabled = get_pvar(SPVAR_14, 0, 1, 1);
+        l1_la_enabled = get_pvar(SPVAR_15, 0, 1, 1);
+        L1_SKILL_HOLD = get_pvar(SPVAR_16, 0, 350, DEFAULT_L1_SKILL_HOLD);
+        l1_block_enabled = get_pvar(SPVAR_17, 0, 1, 1);
+        r1_la_enabled = get_pvar(SPVAR_18, 0, 1, 1);
+        R1_SKILL_HOLD = get_pvar(SPVAR_19, 0, 400, DEFAULT_R1_SKILL_HOLD);
+        r1_block_enabled = get_pvar(SPVAR_20, 0, 1, 1);
+        ultimate_combo_mode = get_pvar(SPVAR_21, 0, 1, 1);
+        ultimate_skill_hold = get_pvar(SPVAR_22, 0, 500, DEFAULT_ULTIMATE_SKILL_HOLD);
+        ult_cancel_button = get_pvar(SPVAR_23, 0, 4, 0);
+        ultimate_combo_skill_hold = get_pvar(SPVAR_24, 10, 400, DEFAULT_ULTIMATE_COMBO_SKILL_HOLD);
+
+        // Initialize OLED display
+        display_active = FALSE;
+    }
+    
+    // Menu timeout disabled - stays open until Circle is pressed
+    
+    // Display title check
+    if(display_title){           
+        // clear OLED screen    
+        combo_run(startup_logo);
+    }
+    
+    //-----------------------------
+    // Screen saver (OLED off)  
+    if(display_black )         
+    {                            
+        count_black += get_rtime();
+        if(count_black >= TimeToShowIntroPicture)   
+        {                        
+            cls_oled(0);         
+            count_black = 0;      
+            display_black = FALSE; 
+        }                         
+    }
+    
+    // Menu activation: L2 + Options
+    if(get_ival(PS4_L2) && event_press(PS4_OPTIONS)) {
+        ModMenu = TRUE;
+        adjust_variable_idx = 0;
+        refresh_OLED = TRUE;
+        display_EDIT = FALSE;
+        display_title = FALSE;  // Disable title when in menu
+    }
+    
+    // Handle menu navigation
+    if(ModMenu && !ModEdit) {
+        // Navigate through menu options (with wraparound)
+        if(event_press(PS4_DOWN)) {
+            adjust_variable_idx++;
+            if(adjust_variable_idx > MAX_MENU_INDEX) adjust_variable_idx = 0; // Wrap to beginning
+            refresh_OLED = TRUE;
+        }
+        if(event_press(PS4_UP)) {
+            adjust_variable_idx--;
+            if(adjust_variable_idx < 0) adjust_variable_idx = MAX_MENU_INDEX; // Wrap to end
+            refresh_OLED = TRUE;
+        }
+        
+        // Adjust values with Left/Right
+        if(event_press(PS4_LEFT)) {
+            if(adjust_variable_idx == 0 || adjust_variable_idx == 5 || adjust_variable_idx == 7 || adjust_variable_idx == 8 || adjust_variable_idx == 10 || adjust_variable_idx == 11 || adjust_variable_idx == 13 || adjust_variable_idx == 14 || adjust_variable_idx == 16 || adjust_variable_idx == 17 || adjust_variable_idx == 19 || adjust_variable_idx == 20 || adjust_variable_idx == 22) {
+                // Toggle values (weaving, LA toggles, block toggles, ultimate toggle, button selection)
+                adjust_timing_value(adjust_variable_idx, -1);
+            } else {
+                // Numeric values (hold times, gaps, skill durations)
+                adjust_timing_value(adjust_variable_idx, -10);
+            }
+            refresh_OLED = TRUE;
+        }
+        if(event_press(PS4_RIGHT)) {
+            if(adjust_variable_idx == 0 || adjust_variable_idx == 5 || adjust_variable_idx == 7 || adjust_variable_idx == 8 || adjust_variable_idx == 10 || adjust_variable_idx == 11 || adjust_variable_idx == 13 || adjust_variable_idx == 14 || adjust_variable_idx == 16 || adjust_variable_idx == 17 || adjust_variable_idx == 19 || adjust_variable_idx == 20 || adjust_variable_idx == 22) {
+                // Toggle values (weaving, LA toggles, block toggles, ultimate toggle, button selection)
+                adjust_timing_value(adjust_variable_idx, 1);
+            } else {
+                // Numeric values (hold times, gaps, skill durations)
+                adjust_timing_value(adjust_variable_idx, 10);
+            }
+            refresh_OLED = TRUE;
+        }
+        
+        // Save and exit menu
+        if(event_press(PS4_CIRCLE)) {
+            combo_run(MESSAGE);
+        }
+    }
+    
+    
+    // Display updates (prevent multiple refreshes)
+    if(refresh_OLED && ModMenu) {
+        combo_run(display_menu);
+        refresh_OLED = FALSE;
+    }
+    
+    // LED status indicators (when not in menu)
+    if(!ModMenu && !ModEdit) {
+        // Basic script color indication
+        combo_run(Blink_MOD_ON);
+    }
+    
+    // Ultimate trigger - Instant detection for natural press timing
+    if(!BUSY && !ULT_BUSY && !ModMenu && !ModEdit && ultimate_combo_mode) {
+        // Trigger as soon as both buttons are detected (even briefly)
+        if((event_press(PS4_L1) && get_val(PS4_R1) > 20) || 
+           (event_press(PS4_R1) && get_val(PS4_L1) > 20) ||
+           (get_val(PS4_L1) > 80 && get_val(PS4_R1) > 80)) {
+            ULT_BUSY = TRUE;
+            combo_run(ULT_WEAVE);
+        }
+    }
+    
+    // Main weaving functionality - Smooth responsive detection like ultimate
+    if(!BUSY && !ULT_BUSY && !ModMenu && !ModEdit && weaving_enabled) {
+        // Square - Responsive detection
+        if(event_press(PS4_SQUARE) || (get_val(PS4_SQUARE) > 70 && !get_ptime(PS4_SQUARE))) { 
+            BUSY=TRUE; block(PS4_SQUARE, BLOCK_DURATION_SHORT); combo_run(W_SQ); 
+        }
+        // Triangle - Responsive detection  
+        if(event_press(PS4_TRIANGLE) || (get_val(PS4_TRIANGLE) > 70 && !get_ptime(PS4_TRIANGLE))) { 
+            BUSY=TRUE; block(PS4_TRIANGLE, BLOCK_DURATION_SHORT); combo_run(W_TR); 
+        }
+        // Circle - Responsive detection
+        if(event_press(PS4_CIRCLE) || (get_val(PS4_CIRCLE) > 70 && !get_ptime(PS4_CIRCLE))) { 
+            BUSY=TRUE; block(PS4_CIRCLE, BLOCK_DURATION_SHORT); combo_run(W_CI); 
+        }
+        // L1 - Responsive detection (only when not part of ultimate combo)
+        if((event_press(PS4_L1) || (get_val(PS4_L1) > 70 && !get_ptime(PS4_L1))) && get_val(PS4_R1) < 20) { 
+            BUSY=TRUE; block(PS4_L1, BLOCK_DURATION_SHORT); combo_run(W_L1); 
+        }
+        // R1 - Responsive detection (only when not part of ultimate combo)  
+        if((event_press(PS4_R1) || (get_val(PS4_R1) > 70 && !get_ptime(PS4_R1))) && get_val(PS4_L1) < 20) { 
+            BUSY=TRUE; block(PS4_R1, BLOCK_DURATION_SHORT); combo_run(W_R1); 
+        }
+    }
+}
+
+// --- Removed old LA_SEQ - now using LA_WITH_SKILL and SKILL_ONLY combos ---
+
+// Global variables to store which button to weave
+int current_skill_button;
+int current_skill_index; // 0=Square, 1=Triangle, 2=Circle, 3=L1, 4=R1
+int current_la_enabled;   // Current button's LA setting
+int current_block_enabled; // Current button's block setting
+int current_skill_hold;   // Current button's skill hold time
+
+// --- Unified weaving combo: Decides whether to do LA based on setting ---
+combo UNIFIED_WEAVE {
+    // Light indicator: Green for weaving active
+    set_led(LED_2, 1); // Green ON
+    
+    // Only do light attack if enabled for this button
+    if(current_la_enabled) {
+        combo_run(LA_WITH_SKILL);  // Full LA -> Skill -> Block combo
+    } else {
+        combo_run(SKILL_ONLY);      // Just Skill -> Block (no LA)
+    }
+    
+    // Turn off light indicator
+    set_led(LED_2, 0); // Green OFF
+    BUSY = FALSE;
+}
+
+// --- Combo with Light Attack ---
+combo LA_WITH_SKILL {
+    // Light attack
+    set_val(PS4_R2, 100);
+    wait(R2_HOLD_TIME);
+    set_val(PS4_R2, 0);
+    wait(GAP_BEFORE_SKILL);
+    
+    // Skill
+    set_val(current_skill_button, 100);
+    wait(current_skill_hold);
+    set_val(current_skill_button, 0);
+    wait(GAP_BEFORE_BLOCK);
+    
+    // Block cancel (set value based on setting, but always wait)
+    if(current_block_enabled) {
+        set_val(PS4_L2, 100);
+    }
+    wait(L2_HOLD_TIME);
+    if(current_block_enabled) {
+        set_val(PS4_L2, 0);
+    }
+}
+
+// --- Combo without Light Attack ---
+combo SKILL_ONLY {
+    // No light attack - straight to skill
+    set_val(current_skill_button, 100);
+    wait(current_skill_hold);
+    set_val(current_skill_button, 0);
+    wait(GAP_BEFORE_BLOCK);
+    
+    // Block cancel (set value based on setting, but always wait)
+    if(current_block_enabled) {
+        set_val(PS4_L2, 100);
+    }
+    wait(L2_HOLD_TIME);
+    if(current_block_enabled) {
+        set_val(PS4_L2, 0);
+    }
+}
+
+// Individual button combos with per-button settings
+combo W_SQ { 
+    current_skill_button = PS4_SQUARE; 
+    current_skill_index = 0;
+    current_la_enabled = square_la_enabled;
+    current_block_enabled = square_block_enabled;
+    current_skill_hold = SQUARE_SKILL_HOLD;
+    combo_run(UNIFIED_WEAVE); 
+}
+combo W_TR { 
+    current_skill_button = PS4_TRIANGLE; 
+    current_skill_index = 1;
+    current_la_enabled = triangle_la_enabled;
+    current_block_enabled = triangle_block_enabled;
+    current_skill_hold = TRIANGLE_SKILL_HOLD;
+    combo_run(UNIFIED_WEAVE); 
+}
+combo W_CI { 
+    current_skill_button = PS4_CIRCLE; 
+    current_skill_index = 2;
+    current_la_enabled = circle_la_enabled;
+    current_block_enabled = circle_block_enabled;
+    current_skill_hold = CIRCLE_SKILL_HOLD;
+    combo_run(UNIFIED_WEAVE); 
+}
+combo W_L1 { 
+    current_skill_button = PS4_L1; 
+    current_skill_index = 3;
+    current_la_enabled = l1_la_enabled;
+    current_block_enabled = l1_block_enabled;
+    current_skill_hold = L1_SKILL_HOLD;
+    combo_run(UNIFIED_WEAVE); 
+}
+combo W_R1 { 
+    current_skill_button = PS4_R1; 
+    current_skill_index = 4;
+    current_la_enabled = r1_la_enabled;
+    current_block_enabled = r1_block_enabled;
+    current_skill_hold = R1_SKILL_HOLD;
+    combo_run(UNIFIED_WEAVE); 
+}
+
+// --- Ultimate Combo: Combat ESO's Unreliable Ultimate System ---
+combo ULT_WEAVE {
+    set_led(LED_3, 1); // Blue ON
+    
+    // Multiple ultimate presses to combat ESO server desync
+    set_val(PS4_L1, 100);
+    set_val(PS4_R1, 100);
+    wait(100); // First press
+    set_val(PS4_L1, 0);
+    set_val(PS4_R1, 0);
+    wait(50); // Brief release
+    
+    // Second press (ESO often needs multiple attempts)
+    set_val(PS4_L1, 100);
+    set_val(PS4_R1, 100);
+    wait(500); // Hold for ultimate to register
+    set_val(PS4_L1, 0);
+    set_val(PS4_R1, 0);
+    wait(300); // Wait for ultimate animation (400ms cast delay + animation)
+    
+    // Follow-up skill after ultimate
+    set_val(ULT_BUTTONS[ult_cancel_button], 100);
+    wait(200); // Hold follow-up skill
+    set_val(ULT_BUTTONS[ult_cancel_button], 0);
+    wait(80); // Gap before block
+    
+    // Block cancel
+    set_val(PS4_L2, 100);
+    wait(L2_HOLD_TIME);
+    set_val(PS4_L2, 0);
+    
+    set_led(LED_3, 0); // Blue OFF
+    ULT_BUSY = FALSE;
+}
+
+//=============================================== 
+//            LED BLINK                           
+//=============================================== 
+combo LED_BLINK {                                 
+    colourled(LED_OnOff);                           
+    wait(200);                                      
+    colourled(ColorOFF);                            
+    wait(100);                                      
+    colourled(LED_OnOff);                           
+    wait(200);                                      
+    colourled(ColorOFF);                             
+    wait(100);                                      
+}
+
+//=============================================== 
+//                 VIBRATE SETUP                 
+//=============================================== 
+combo vibrate {                                   
+    set_rumble(rumble_tipe, 100);                   
+    wait(300);                                       
+    reset_rumble();                                 
+    wait(100);                                       
+    set_rumble(rumble_tipe, 100);                   
+    wait(300);                                       
+    reset_rumble();                                 
+}
+
+//===============================================  
+//                 RUMBLE_TIPE                     
+//===============================================  
+function set_rumble_tipe ( val) {                  
+    if( val){ rumble_tipe = RUMBLE_A ; LED_OnOff = Green;}  
+    else    { rumble_tipe = RUMBLE_B ; LED_OnOff = Red  ;} 
+    combo_run(vibrate);                     
+    combo_run(LED_BLINK);                   
+}
+
+//===============================================  
+//             LED COLOR FUNCTION
+//===============================================  
+int data_indx;
+function colourled(color) {  
+    for( data_indx = 0; data_indx < 3; data_indx++ ) {
+        set_led(data_indx,duint8 ((color * 3) + data_indx));
+    }
+}
+
+//===============================================  
+//             BLINK NOTIFY FUNCTIONS
+//===============================================  
+int BlinckColor = 3;                 
+function blinck ( var){  
+    if(var){               
+        BlinckColor = Green;
+    }else{                 
+        BlinckColor = Red;    
+    }                       
+    combo_run(BLINK_NOTIFY); 
+}
+
+combo BLINK_NOTIFY {        
+    colourled(BlinckColor);   
+    wait(300);                 
+    colourled(ColorOFF);        
+    wait(100);                  
+    colourled(BlinckColor);      
+    wait(300);                   
+    colourled(ColorOFF);          
+}
+
+int MOD_Color;
+int blink_n ;
+combo Blink_MOD_ON   {
+    colourled(Yellow);// Basic script Color   
+    if( blink_n == 1 ) {
+        if(weaving_enabled ){colourled(Green);}
+    } 
+    wait(500);                 
+    colourled(Yellow);// Basic Script Color    
+    blink_n +=1; 
+    if( blink_n > 1)blink_n = 1; 
+}
+
+// OLED Display Functions
+combo startup_logo {
+    cls_oled(0); // Clear the display at the very beginning of the combo.
+
+    // Displays "ESO Light Weaving" first so it is always visible.
+    print(center_x(sizeof(ESO_SUBTITLE) - 1, OLED_FONT_SMALL_WIDTH), 40, OLED_FONT_SMALL, 1, ESO_SUBTITLE[0]);
+
+    // Displays "ESO - WEAVING" character by character with a medium font and fixed coordinates.
+    print(10, 15, OLED_FONT_MEDIUM, 1, E[0]);
+    wait(100);
+    print(18, 15, OLED_FONT_MEDIUM, 1, S[0]);
+    wait(100);
+    print(26, 15, OLED_FONT_MEDIUM, 1, O[0]);
+    wait(100);
+    print(34, 15, OLED_FONT_MEDIUM, 1, SPACE[0]);
+    wait(100);
+    print(42, 15, OLED_FONT_MEDIUM, 1, DASH[0]);
+    wait(100);
+    print(50, 15, OLED_FONT_MEDIUM, 1, SPACE[0]);
+    wait(100);
+    print(58, 15, OLED_FONT_MEDIUM, 1, W[0]);
+    wait(100);
+    print(66, 15, OLED_FONT_MEDIUM, 1, E[0]);
+    wait(100);
+    print(74, 15, OLED_FONT_MEDIUM, 1, A[0]);
+    wait(100);
+    print(82, 15, OLED_FONT_MEDIUM, 1, V[0]);
+    wait(100);
+    print(90, 15, OLED_FONT_MEDIUM, 1, I[0]);
+    wait(100);
+    print(98, 15, OLED_FONT_MEDIUM, 1, N[0]);
+    wait(100);
+    print(106, 15, OLED_FONT_MEDIUM, 1, G[0]);
+    wait(100);
+
+    // Warte 5 Sekunden, bevor die Combo beendet wird, damit das Logo sichtbar bleibt.
+    wait(5000);
+}
+
+combo display_menu {
+    cls_oled(0);
+    wait(MENU_DISPLAY_DELAY); // Small delay to prevent display issues
+    print(center_x(sizeof(ESO_TITLE) - 1, OLED_FONT_SMALL_WIDTH), 2, OLED_FONT_SMALL, 1, ESO_TITLE[0]);
+    line_oled(1, 14, 127, 14, 1, 1);
+    
+    // Display current timing setting
+    print(2, 20, OLED_FONT_SMALL, OLED_WHITE, EditVarStr[adjust_variable_idx]);
+    
+    // Display current value - CORRECTED INDICES
+    if(adjust_variable_idx == 0 || adjust_variable_idx == 5 || adjust_variable_idx == 7 || adjust_variable_idx == 8 || adjust_variable_idx == 10 || adjust_variable_idx == 11 || adjust_variable_idx == 13 || adjust_variable_idx == 14 || adjust_variable_idx == 16 || adjust_variable_idx == 17 || adjust_variable_idx == 19 || adjust_variable_idx == 20) {
+        // Toggle values (ON/OFF)
+        if(get_timing_value(adjust_variable_idx)) {
+            print(center_x(sizeof(ON) - 1, OLED_FONT_MEDIUM_WIDTH), 35, OLED_FONT_MEDIUM, 1, ON[0]);
+        } else {
+            print(center_x(sizeof(OFF) - 1, OLED_FONT_MEDIUM_WIDTH), 35, OLED_FONT_MEDIUM, 1, OFF[0]);
+        }
+    } else if(adjust_variable_idx == 22) {
+        // Display selected skill button
+        if(ult_cancel_button == 0) {
+            print(center_x(sizeof(BTN_R1) - 1, OLED_FONT_MEDIUM_WIDTH), 35, OLED_FONT_MEDIUM, 1, BTN_R1[0]);
+        } else if(ult_cancel_button == 1) {
+            print(center_x(sizeof(BTN_L1) - 1, OLED_FONT_MEDIUM_WIDTH), 35, OLED_FONT_MEDIUM, 1, BTN_L1[0]);
+        } else if(ult_cancel_button == 2) {
+            print(center_x(sizeof(BTN_SQUARE) - 1, OLED_FONT_MEDIUM_WIDTH), 35, OLED_FONT_MEDIUM, 1, BTN_SQUARE[0]);
+        } else if(ult_cancel_button == 3) {
+            print(center_x(sizeof(BTN_CIRCLE) - 1, OLED_FONT_MEDIUM_WIDTH), 35, OLED_FONT_MEDIUM, 1, BTN_CIRCLE[0]);
+        } else if(ult_cancel_button == 4) {
+            print(center_x(sizeof(BTN_TRIANGLE) - 1, OLED_FONT_MEDIUM_WIDTH), 35, OLED_FONT_MEDIUM, 1, BTN_TRIANGLE[0]);
+        }
+    } else {
+        // Timing values (numbers)
+        print_number(get_timing_value(adjust_variable_idx), find_digits(get_timing_value(adjust_variable_idx)), center_x(3, OLED_FONT_MEDIUM_WIDTH), 35, OLED_FONT_MEDIUM);
+    }
+    
+}
+
+
+
+
+
+// Function to adjust values for simplified structure
+function adjust_timing_value(idx, change) {
+    if(idx == 0) {        // Weaving master toggle
+        weaving_enabled = !weaving_enabled;
+    }
+    else if(idx == 1) {   // R2 Hold Time (menu index 1)
+        R2_HOLD_TIME += change;
+        if(R2_HOLD_TIME > ValRange[1]) R2_HOLD_TIME = ValRange[1];
+        if(R2_HOLD_TIME < ValRange[0]) R2_HOLD_TIME = ValRange[0];
+    }
+    else if(idx == 2) {   // Gap Before Skill (menu index 2)
+        GAP_BEFORE_SKILL += change;
+        if(GAP_BEFORE_SKILL > 400) GAP_BEFORE_SKILL = 400;
+        if(GAP_BEFORE_SKILL < 50) GAP_BEFORE_SKILL = 50;
+    }
+    else if(idx == 3) {   // Gap Before Block (menu index 3)
+        GAP_BEFORE_BLOCK += change;
+        if(GAP_BEFORE_BLOCK > 400) GAP_BEFORE_BLOCK = 400;
+        if(GAP_BEFORE_BLOCK < 50) GAP_BEFORE_BLOCK = 50;
+    }
+    else if(idx == 4) {   // L2 Hold Time (menu index 4)
+        L2_HOLD_TIME += change;
+        if(L2_HOLD_TIME > ValRange[3]) L2_HOLD_TIME = ValRange[3];
+        if(L2_HOLD_TIME < ValRange[2]) L2_HOLD_TIME = ValRange[2];
+    }
+    else if(idx == 5) {   // Square LA toggle (menu index 5)
+        square_la_enabled = !square_la_enabled;
+    }
+    else if(idx == 6) {   // Square Skill Hold (menu index 6)
+        SQUARE_SKILL_HOLD += change;
+        if(SQUARE_SKILL_HOLD > ValRange[5]) SQUARE_SKILL_HOLD = ValRange[5];
+        if(SQUARE_SKILL_HOLD < ValRange[4]) SQUARE_SKILL_HOLD = ValRange[4];
+    }
+    else if(idx == 7) {   // Square Block toggle (menu index 7)
+        square_block_enabled = !square_block_enabled;
+    }
+    else if(idx == 8) {   // Triangle LA toggle (menu index 8)
+        triangle_la_enabled = !triangle_la_enabled;
+    }
+    else if(idx == 9) {   // Triangle Skill Hold (menu index 9)
+        TRIANGLE_SKILL_HOLD += change;
+        if(TRIANGLE_SKILL_HOLD > ValRange[7]) TRIANGLE_SKILL_HOLD = ValRange[7];
+        if(TRIANGLE_SKILL_HOLD < ValRange[6]) TRIANGLE_SKILL_HOLD = ValRange[6];
+    }
+    else if(idx == 10) {  // Triangle Block toggle (menu index 10)
+        triangle_block_enabled = !triangle_block_enabled;
+    }
+    else if(idx == 11) {  // Circle LA toggle (menu index 11)
+        circle_la_enabled = !circle_la_enabled;
+    }
+    else if(idx == 12) {  // Circle Skill Hold (menu index 12)
+        CIRCLE_SKILL_HOLD += change;
+        if(CIRCLE_SKILL_HOLD > ValRange[9]) CIRCLE_SKILL_HOLD = ValRange[9];
+        if(CIRCLE_SKILL_HOLD < ValRange[8]) CIRCLE_SKILL_HOLD = ValRange[8];
+    }
+    else if(idx == 13) {  // Circle Block toggle (menu index 13)
+        circle_block_enabled = !circle_block_enabled;
+    }
+    else if(idx == 14) {  // L1 LA toggle (menu index 14)
+        l1_la_enabled = !l1_la_enabled;
+    }
+    else if(idx == 15) {  // L1 Skill Hold (menu index 15)
+        L1_SKILL_HOLD += change;
+        if(L1_SKILL_HOLD > ValRange[11]) L1_SKILL_HOLD = ValRange[11];
+        if(L1_SKILL_HOLD < ValRange[10]) L1_SKILL_HOLD = ValRange[10];
+    }
+    else if(idx == 16) {  // L1 Block toggle (menu index 16)
+        l1_block_enabled = !l1_block_enabled;
+    }
+    else if(idx == 17) {  // R1 LA toggle (menu index 17)
+        r1_la_enabled = !r1_la_enabled;
+    }
+    else if(idx == 18) {  // R1 Skill Hold (menu index 18)
+        R1_SKILL_HOLD += change;
+        if(R1_SKILL_HOLD > ValRange[13]) R1_SKILL_HOLD = ValRange[13];
+        if(R1_SKILL_HOLD < ValRange[12]) R1_SKILL_HOLD = ValRange[12];
+    }
+    else if(idx == 19) {  // R1 Block toggle (menu index 19)
+        r1_block_enabled = !r1_block_enabled;
+    }
+    else if(idx == 20) {  // Ultimate combo mode toggle (menu index 20)
+        ultimate_combo_mode = !ultimate_combo_mode;
+    }
+    else if(idx == 21) {  // Ultimate Hold (L1+R1 hold time) (menu index 21)
+        ultimate_skill_hold += change;
+        if(ultimate_skill_hold > ValRange[15]) ultimate_skill_hold = ValRange[15];
+        if(ultimate_skill_hold < ValRange[14]) ultimate_skill_hold = ValRange[14];
+    }
+    else if(idx == 22) {  // Ultimate skill button selection (menu index 22)
+        ult_cancel_button += change;
+        if(ult_cancel_button > 4) ult_cancel_button = 0;
+        if(ult_cancel_button < 0) ult_cancel_button = 4;
+    }
+    else if(idx == 23) {  // Ultimate skill hold time (menu index 23)
+        ultimate_combo_skill_hold += change;
+        if(ultimate_combo_skill_hold > ValRange[17]) ultimate_combo_skill_hold = ValRange[17];
+        if(ultimate_combo_skill_hold < ValRange[16]) ultimate_combo_skill_hold = ValRange[16];
+    }
+}
+
+// Helper function to get display value - CORRECTED INDICES
+function get_timing_value(idx) {
+    if(idx == 0) return weaving_enabled;           // 0: Weaving master toggle
+    if(idx == 1) return R2_HOLD_TIME;              // 1: R2 Hold Time
+    if(idx == 2) return GAP_BEFORE_SKILL;          // 2: Gap Before Skill
+    if(idx == 3) return GAP_BEFORE_BLOCK;          // 3: Gap Before Block
+    if(idx == 4) return L2_HOLD_TIME;              // 4: L2 Hold Time
+    if(idx == 5) return square_la_enabled;         // 5: Square LA toggle
+    if(idx == 6) return SQUARE_SKILL_HOLD;         // 6: Square Skill Hold
+    if(idx == 7) return square_block_enabled;      // 7: Square Block toggle
+    if(idx == 8) return triangle_la_enabled;       // 8: Triangle LA toggle
+    if(idx == 9) return TRIANGLE_SKILL_HOLD;       // 9: Triangle Skill Hold
+    if(idx == 10) return triangle_block_enabled;   // 10: Triangle Block toggle
+    if(idx == 11) return circle_la_enabled;        // 11: Circle LA toggle
+    if(idx == 12) return CIRCLE_SKILL_HOLD;        // 12: Circle Skill Hold
+    if(idx == 13) return circle_block_enabled;     // 13: Circle Block toggle
+    if(idx == 14) return l1_la_enabled;            // 14: L1 LA toggle
+    if(idx == 15) return L1_SKILL_HOLD;            // 15: L1 Skill Hold
+    if(idx == 16) return l1_block_enabled;         // 16: L1 Block toggle
+    if(idx == 17) return r1_la_enabled;            // 17: R1 LA toggle
+    if(idx == 18) return R1_SKILL_HOLD;            // 18: R1 Skill Hold
+    if(idx == 19) return r1_block_enabled;         // 19: R1 Block toggle
+    if(idx == 20) return ultimate_combo_mode;      // 20: Ultimate combo mode toggle
+    if(idx == 21) return ultimate_skill_hold;      // 21: Ultimate L1+R1 hold time
+    if(idx == 22) return ult_cancel_button;        // 22: Ultimate skill button
+    if(idx == 23) return ultimate_combo_skill_hold; // 23: Ultimate skill hold time
+    return 0;
+}
+
+// Helper function to count digits in a number
+function find_digits(num) {
+    if(num < 0) num = -num;
+    if(num < 10) return 1;
+    if(num < 100) return 2;
+    if(num < 1000) return 3;
+    return 4;
+}
+
+// Proper Cronus Zen number display using 1-based indexing
+function print_number(f_val, digits, x, y, font) {
+    if(f_val < 10) {
+        putc_oled(1, ASCII_NUM[f_val]);
+        puts_oled(x, y, font, 1, OLED_WHITE);
+    }
+    else if(f_val < 100) {
+        putc_oled(1, ASCII_NUM[f_val / 10]);
+        putc_oled(2, ASCII_NUM[f_val % 10]);
+        puts_oled(x, y, font, 2, OLED_WHITE);
+    }
+    else {
+        putc_oled(1, ASCII_NUM[f_val / 100]);
+        putc_oled(2, ASCII_NUM[(f_val / 10) % 10]);
+        putc_oled(3, ASCII_NUM[f_val % 10]);
+        puts_oled(x, y, font, 3, OLED_WHITE);
+    }
+}
+
+function center_x(f_chars, f_font) {
+    return (OLED_WIDTH / 2) - ((f_chars * f_font) / 2);
+}
+
+// Helper function to get light attack setting for specific button
+function get_button_la_setting(button_index) {
+    if(button_index == 0) return square_la_enabled;      // Square
+    if(button_index == 1) return triangle_la_enabled;    // Triangle
+    if(button_index == 2) return circle_la_enabled;      // Circle
+    if(button_index == 3) return l1_la_enabled;          // L1
+    if(button_index == 4) return r1_la_enabled;          // R1
+    return FALSE;
+}
+
+// Helper function to get block cancel setting for specific button
+function get_button_block_setting(button_index) {
+    if(button_index == 0) return square_block_enabled;   // Square
+    if(button_index == 1) return triangle_block_enabled; // Triangle
+    if(button_index == 2) return circle_block_enabled;   // Circle
+    if(button_index == 3) return l1_block_enabled;       // L1
+    if(button_index == 4) return r1_block_enabled;       // R1
+    return FALSE;
+}
+
+
+// Save settings function
+function save_toggles() {
+    // Save all current settings to SPVAR slots
+    set_pvar(SPVAR_1, weaving_enabled);
+    set_pvar(SPVAR_2, R2_HOLD_TIME);
+    set_pvar(SPVAR_3, GAP_BEFORE_SKILL);
+    set_pvar(SPVAR_4, GAP_BEFORE_BLOCK);
+    set_pvar(SPVAR_5, L2_HOLD_TIME);
+    set_pvar(SPVAR_6, square_la_enabled);
+    set_pvar(SPVAR_7, SQUARE_SKILL_HOLD);
+    set_pvar(SPVAR_8, square_block_enabled);
+    set_pvar(SPVAR_9, triangle_la_enabled);
+    set_pvar(SPVAR_10, TRIANGLE_SKILL_HOLD);
+    set_pvar(SPVAR_11, triangle_block_enabled);
+    set_pvar(SPVAR_12, circle_la_enabled);
+    set_pvar(SPVAR_13, CIRCLE_SKILL_HOLD);
+    set_pvar(SPVAR_14, circle_block_enabled);
+    set_pvar(SPVAR_15, l1_la_enabled);
+    set_pvar(SPVAR_16, L1_SKILL_HOLD);
+    set_pvar(SPVAR_17, l1_block_enabled);
+    set_pvar(SPVAR_18, r1_la_enabled);
+    set_pvar(SPVAR_19, R1_SKILL_HOLD);
+    set_pvar(SPVAR_20, r1_block_enabled);
+    set_pvar(SPVAR_21, ultimate_combo_mode);
+    set_pvar(SPVAR_22, ultimate_skill_hold);
+    set_pvar(SPVAR_23, ult_cancel_button);
+    set_pvar(SPVAR_24, ultimate_combo_skill_hold);
+    
+    combo_run(EXIT);
+}
+
+// Exit message
+int exit_wait = 1500;
+combo EXIT {
+    wait(exit_wait);
+    cls_oled(0);
+    ModMenu = FALSE;
+    ModEdit = FALSE;
+    display_EDIT = FALSE;
+    display_title = TRUE;
+}
+
+// Save confirmation message
+combo MESSAGE {
+    wait(20);
+    save_toggles();
+    cls_oled(0);
+    print(center_x(sizeof(EXIT_TXT1) - 1, OLED_FONT_MEDIUM_WIDTH), 2, OLED_FONT_MEDIUM, 1, EXIT_TXT1[0]);
+    print(center_x(sizeof(EXIT_TXT2) - 1, OLED_FONT_MEDIUM_WIDTH), 23, OLED_FONT_MEDIUM, 1, EXIT_TXT2[0]);
+    exit_wait = 2000;
+}
+
+
